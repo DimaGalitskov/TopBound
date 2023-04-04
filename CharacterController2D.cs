@@ -9,7 +9,7 @@ public class CharacterController2D : MonoBehaviour
 
     private Rigidbody rb;
     private bool isGrounded;
-    private bool isFacingRight;
+    private Vector3 faceDirection;
     private bool isDashAttackTimeout;
     private Vector2 moveInput;
     private bool jumpInput;
@@ -23,11 +23,10 @@ public class CharacterController2D : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
-        isFacingRight = true;
         SetGravityScale(gravityScale);
 
         inputActions = new PlayerInput();
-        inputActions.Player.Move.performed += ctx => { moveInput = ctx.ReadValue<Vector2>(); CheckDirectionToFace(moveInput.x > 0); };
+        inputActions.Player.Move.performed += ctx => { moveInput = ctx.ReadValue<Vector2>(); CheckFaceDirection(moveInput); };
         inputActions.Player.Move.canceled += ctx => moveInput = Vector2.zero;
         inputActions.Player.Jump.started += ctx => { jumpInputTimer = jumpInputWindow; jumpInput = true; };
         inputActions.Player.Jump.canceled += ctx => jumpInput = false;
@@ -165,13 +164,12 @@ public class CharacterController2D : MonoBehaviour
         {
             hasDashed = true;
             Sleep(dashFreezeTime);
-            StartCoroutine(nameof(StartDash), moveInput);
+            StartCoroutine(nameof(StartDash), faceDirection);
         }
     }
-    private IEnumerator StartDash(Vector2 input)
+    private IEnumerator StartDash(Vector3 direction)
     {
         isDashAttackTimeout = true;
-        Vector3 direction = new Vector3(input.x, 0, input.y);
         float startTime = Time.time;
         //We keep the player's velocity at the dash speed during the "attack" phase (in celeste the first 0.15s)
         while (Time.time - startTime <= dashAttackTimeout)
@@ -197,7 +195,7 @@ public class CharacterController2D : MonoBehaviour
     [SerializeField] private GameObject striker;
     [SerializeField] private GameObject strikeParticle;
     [SerializeField] private GameObject strikeImpactParticle;
-    [SerializeField] private Vector2 strikeDisplacement = new Vector2(2,.5f);
+    [SerializeField] private Vector3 strikeDisplacement = new Vector3(2,.5f,2);
     [SerializeField] private int burstCount = 0;
     [SerializeField] private float strikeRange = 5;
     [SerializeField] private float strikeStartDelay = .1f;
@@ -210,12 +208,11 @@ public class CharacterController2D : MonoBehaviour
     private void HandleStrike()
     {
         strikeTimer -= Time.deltaTime;
-        lastDashDirection = isFacingRight ? Vector2.right : Vector2.left;
         if (strikeInput && !isStriking && !hasDashed && strikeTimer < 0)
         {
             isStriking = true;
             Sleep(strikeFreezeTime);
-            StartCoroutine(nameof(StartStrike), lastDashDirection);
+            StartCoroutine(nameof(StartStrike), faceDirection);
         }
     }
     private IEnumerator StartBarrage(Vector2 direction)
@@ -224,7 +221,7 @@ public class CharacterController2D : MonoBehaviour
         var count = burstCount;
         while (strikeInput && count>0)
         {
-            float strikeAngle = isFacingRight ? -90 : 90;
+            float strikeAngle = Quaternion.Euler(direction).y;
             Quaternion strikeRotation = Quaternion.Euler(0, 0, strikeAngle);
             var instance = Instantiate(strikeParticle, transform.position, strikeRotation);
             Destroy(instance, 0.5f);
@@ -237,16 +234,16 @@ public class CharacterController2D : MonoBehaviour
         strikeTimer = strikeCooldownTime;
         isStriking = false;
     }
-    private IEnumerator StartStrike(Vector2 direction)
+    private IEnumerator StartStrike(Vector3 direction)
     {
         yield return new WaitForSeconds(strikeStartDelay);
-        float strikeAngle = isFacingRight ? 180 : 0;
-        Quaternion strikeRotation = Quaternion.Euler(45, strikeAngle, 0);
-        Vector3 sctikeLocation = new Vector3(transform.position.x + lastDashDirection.x * strikeDisplacement.x, transform.position.y + strikeDisplacement.y, 0);
+        // Calculate the strike angle based on the direction
+        Quaternion strikeRotation = Quaternion.LookRotation(direction, Vector3.up) * strikeParticle.transform.rotation;
+        Vector3 sctikeLocation = new Vector3(transform.position.x + direction.x * strikeDisplacement.x, transform.position.y + strikeDisplacement.y, transform.position.z + direction.z * strikeDisplacement.z);
         var instance = Instantiate(strikeParticle, sctikeLocation, strikeRotation);
         Destroy(instance, 0.5f);
-        RaycastHit2D hit = Physics2D.Raycast(transform.position, Vector2.right, strikeRange, strikeLayer);
-        if (hit) {
+        RaycastHit hit;
+        if (Physics.Raycast(transform.position, direction, out hit, strikeRange, strikeLayer)) {
             var particle = Instantiate(strikeImpactParticle, hit.point, strikeImpactParticle.transform.rotation);
             Destroy(particle, 0.5f);
             hit.collider.SendMessage("Strike", SendMessageOptions.DontRequireReceiver);
@@ -254,8 +251,6 @@ public class CharacterController2D : MonoBehaviour
         yield return new WaitForSeconds(strikeEndDelay);
         isStriking = false;
     }
-
-
 
     private void Sleep(float duration)
     {
@@ -272,8 +267,9 @@ public class CharacterController2D : MonoBehaviour
         Time.timeScale = 1;
     }
 
-    private void CheckDirectionToFace(bool isMovingRight)
-    {
-        if (isMovingRight != isFacingRight) isFacingRight = !isFacingRight;
+    void CheckFaceDirection(Vector2 direction) {
+        if(direction.magnitude > 0.1f) {
+            faceDirection = new Vector3(moveInput.x, 0, moveInput.y);
+        }
     }
 }
