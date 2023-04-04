@@ -115,8 +115,8 @@ public class CharacterController2D : MonoBehaviour
     [SerializeField] private float maxFallSpeed = 30;
     void HandleGravity()
     {
-        if (isDashAttackTimeout) SetGravityScale(0);
-        else if (rb.velocity.y < jumpVelocityFalloff || rb.velocity.y > 0 && jumpInput == false) {rb.velocity += Vector3.down * gravityScale * fallMultiplier * Time.deltaTime; rb.velocity = new Vector3(rb.velocity.x, Mathf.Max(rb.velocity.y, -maxFallSpeed), rb.velocity.z); }
+        //if (isDashAttackTimeout) SetGravityScale(0);
+        if (rb.velocity.y < jumpVelocityFalloff || rb.velocity.y > 0 && jumpInput == false) {rb.velocity += Vector3.down * gravityScale * fallMultiplier * Time.deltaTime; rb.velocity = new Vector3(rb.velocity.x, Mathf.Max(rb.velocity.y, -maxFallSpeed), rb.velocity.z); }
         else SetGravityScale(gravityScale);
     }
 
@@ -157,7 +157,6 @@ public class CharacterController2D : MonoBehaviour
     [SerializeField] private float dashFreezeTime = 0.05f;
     [SerializeField] private float dashAttackTimeout = .1f;
     [SerializeField] private float dashEndTimeout = .4f;
-    Vector2 lastDashDirection;
     private void HandleDash()
     {
         if(dashInput && !hasDashed)
@@ -269,7 +268,7 @@ public class CharacterController2D : MonoBehaviour
 
     void CheckFaceDirection(Vector2 direction) {
         if(direction.magnitude > 0.1f) {
-            faceDirection = new Vector3(moveInput.x, 0, moveInput.y);
+            faceDirection = new Vector3(moveInput.x, 0, moveInput.y).normalized;
         }
     }
 }
