@@ -49,6 +49,7 @@ public class CharacterController2D : MonoBehaviour
 
     private void FixedUpdate()
     {
+        Debug.Log(rb.velocity.magnitude);
         CheckGrounded();
         HandleJump();
         HandleWalking(1);
@@ -73,33 +74,39 @@ public class CharacterController2D : MonoBehaviour
     private void HandleWalking(float lerpAmount)
     {
         //Calculate the direction we want to move in and our desired velocity
-        float targetSpeed = moveInput.magnitude * walkSpeed;
+        Vector2 targetSpeed = moveInput * walkSpeed;
         //We can reduce our control using Lerp() this smooths changes to our direction and speed
-        targetSpeed = Mathf.Lerp(rb.velocity.magnitude, targetSpeed, lerpAmount);
+        //targetSpeed = Mathf.Lerp(rb.velocity.magnitude, targetSpeed, lerpAmount);
 
         //Gets an acceleration value based on if we are accelerating (includes turning) 
         //or trying to decelerate (stop). As well as applying a multiplier if we're air borne.
-        float accelRate;
+        Vector2 accelRate;
         if (groundedTimer > 0)
-            accelRate = (Mathf.Abs(targetSpeed) > 0.01f) ? acceleration : deceleration;
+        {
+            accelRate.x = (Mathf.Abs(targetSpeed.x) > 0.01f) ? acceleration : deceleration;
+            accelRate.y = (Mathf.Abs(targetSpeed.y) > 0.01f) ? acceleration : deceleration;
+        }
         else
-            accelRate = (Mathf.Abs(targetSpeed) > 0.01f) ? acceleration * airMultiplier : deceleration * airMultiplier;
-
+        {
+            accelRate.x = (Mathf.Abs(targetSpeed.x) > 0.01f) ? acceleration * airMultiplier : deceleration * airMultiplier;
+            accelRate.y = (Mathf.Abs(targetSpeed.y) > 0.01f) ? acceleration * airMultiplier : deceleration * airMultiplier;
+        }
         //We won't slow the player down if they are moving in their desired direction but at a greater speed than their maxSpeed
         //    if (Mathf.Abs(rb.velocity.magnitude) > Mathf.Abs(targetSpeed) && Mathf.Sign(rb.velocity.magnitude) == Mathf.Sign(targetSpeed) && Mathf.Abs(targetSpeed) > 0.01f && groundedTimer < 0)
         //{
-            //Prevent any deceleration from happening, or in other words conserve are current momentum
-            //You could experiment with allowing for the player to slightly increae their speed whilst in this "state"
+        //Prevent any deceleration from happening, or in other words conserve are current momentum
+        //You could experiment with allowing for the player to slightly increae their speed whilst in this "state"
         //    accelRate = 0;
         //}
 
         //Calculate difference between current velocity and desired velocity
-        float speedDif = targetSpeed - rb.velocity.magnitude;
+        Vector2 speedDif = targetSpeed - new Vector2(rb.velocity.x,rb.velocity.z);
         //Calculate force along x-axis to apply to thr player
-        float movement = speedDif * accelRate;
+        Vector2 movement = speedDif * accelRate;
         //Convert this to a vector and apply to rigidbody
-        Vector3 movementVector = new Vector3(moveInput.x, 0, moveInput.y);
-        rb.AddForce(movement * movementVector * Time.deltaTime * 1000, ForceMode.Force);
+        rb.AddForce(movement.x * Vector3.right * Time.deltaTime * 1000, ForceMode.Force);
+        rb.AddForce(movement.y * Vector3.forward * Time.deltaTime * 1000, ForceMode.Force);
+        //rb.AddForce(movement * Vector2.right, ForceMode2D.Force);
     }
 
     [Header("Gravity")]
@@ -125,7 +132,7 @@ public class CharacterController2D : MonoBehaviour
     private void CheckGrounded()
     {
         groundedTimer -= Time.deltaTime;
-        isGrounded = Physics2D.Raycast(transform.position, Vector3.down, 1.1f, groundLayer);
+        isGrounded = Physics.Raycast(transform.position, Vector3.down, 1.1f, groundLayer);
         if (isGrounded) groundedTimer = coyoteTime;
         if (isGrounded) hasJumped = false;
     }
@@ -142,7 +149,7 @@ public class CharacterController2D : MonoBehaviour
             hasJumped = true;
             float force = jumpForce;
             if (rb.velocity.y < 0) force -= rb.velocity.y;
-            rb.AddForce(Vector2.up * force, ForceMode.Impulse);
+            rb.AddForce(Vector3.up * force, ForceMode.Impulse);
         }
     }
 
@@ -154,22 +161,22 @@ public class CharacterController2D : MonoBehaviour
     Vector2 lastDashDirection;
     private void HandleDash()
     {
-        lastDashDirection = isFacingRight ? Vector2.right : Vector2.left;
         if(dashInput && !hasDashed)
         {
             hasDashed = true;
             Sleep(dashFreezeTime);
-            StartCoroutine(nameof(StartDash), lastDashDirection);
+            StartCoroutine(nameof(StartDash), moveInput);
         }
     }
-    private IEnumerator StartDash(Vector2 direction)
+    private IEnumerator StartDash(Vector2 input)
     {
         isDashAttackTimeout = true;
+        Vector3 direction = new Vector3(input.x, 0, input.y);
         float startTime = Time.time;
         //We keep the player's velocity at the dash speed during the "attack" phase (in celeste the first 0.15s)
         while (Time.time - startTime <= dashAttackTimeout)
         {
-            rb.velocity = direction.normalized * dashForce;
+            rb.velocity = direction * dashForce;
             //Pauses the loop until the next frame, creating something of a Update loop. 
             //This is a cleaner implementation opposed to multiple timers and this coroutine approach is actually what is used in Celeste :D
             yield return null;
@@ -177,7 +184,7 @@ public class CharacterController2D : MonoBehaviour
         isDashAttackTimeout = false;
         startTime = Time.time;
         //Begins the "end" of our dash where we return some control to the player but still limit run acceleration (see Update() and Run())
-        rb.velocity = walkSpeed * direction.normalized;
+        rb.velocity = walkSpeed * direction;
         while (Time.time - startTime <= dashEndTimeout)
         {
             yield return null;
