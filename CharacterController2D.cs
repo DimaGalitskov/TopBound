@@ -48,7 +48,6 @@ public class CharacterController2D : MonoBehaviour
 
     private void FixedUpdate()
     {
-        Debug.Log(rb.velocity.magnitude);
         CheckGrounded();
         HandleJump();
         HandleWalking(1);
@@ -194,6 +193,9 @@ public class CharacterController2D : MonoBehaviour
     [SerializeField] private GameObject striker;
     [SerializeField] private GameObject strikeParticle;
     [SerializeField] private GameObject strikeImpactParticle;
+    [SerializeField] private GameObject preStrikeParticle;
+    [SerializeField] private float stepTimeout;
+    [SerializeField] private float stepForce;
     [SerializeField] private Vector3 strikeDisplacement = new Vector3(2,.5f,2);
     [SerializeField] private int burstCount = 0;
     [SerializeField] private float strikeRange = 5;
@@ -216,6 +218,7 @@ public class CharacterController2D : MonoBehaviour
     }
     private IEnumerator StartBarrage(Vector2 direction)
     {
+
         yield return new WaitForSeconds(strikeStartDelay);
         var count = burstCount;
         while (strikeInput && count>0)
@@ -235,21 +238,53 @@ public class CharacterController2D : MonoBehaviour
     }
     private IEnumerator StartStrike(Vector3 direction)
     {
+        // Spawn pre strike special effect and step
+        var instance = Instantiate(preStrikeParticle, transform.position, transform.rotation, transform);
+        Destroy(instance, 0.5f);
         yield return new WaitForSeconds(strikeStartDelay);
+        StartCoroutine(nameof(StrikeStep),direction);
+
         // Calculate the strike angle based on the direction
         Quaternion strikeRotation = Quaternion.LookRotation(direction, Vector3.up) * strikeParticle.transform.rotation;
         Vector3 sctikeLocation = new Vector3(transform.position.x + direction.x * strikeDisplacement.x, transform.position.y + strikeDisplacement.y, transform.position.z + direction.z * strikeDisplacement.z);
-        var instance = Instantiate(strikeParticle, sctikeLocation, strikeRotation);
+        instance = Instantiate(strikeParticle, sctikeLocation, strikeRotation);
         Destroy(instance, 0.5f);
-        RaycastHit hit;
-        if (Physics.Raycast(transform.position, direction, out hit, strikeRange, strikeLayer)) {
-            var particle = Instantiate(strikeImpactParticle, hit.point, strikeImpactParticle.transform.rotation);
-            Destroy(particle, 0.5f);
-            hit.collider.SendMessage("Strike", SendMessageOptions.DontRequireReceiver);
-        }
+        StartCoroutine(nameof(StrikeScan), direction);
         yield return new WaitForSeconds(strikeEndDelay);
         isStriking = false;
     }
+    private IEnumerator StrikeStep(Vector3 direction) {
+        float startTime = Time.time;
+        while (Time.time - startTime <= stepTimeout)
+        {
+            rb.velocity = direction * stepForce;
+            yield return null;
+        }
+        startTime = Time.time;
+        rb.velocity = walkSpeed * direction;
+    }
+    private IEnumerator StrikeScan(Vector3 direction) {
+        int count = 7;
+        float degreesToRotate = -45.0f;
+        Quaternion rotation = Quaternion.Euler(0, degreesToRotate, 0);
+        direction = rotation * direction;
+        degreesToRotate = 5.0f;
+        rotation = Quaternion.Euler(0, degreesToRotate, 0);
+        while (count > 0) {
+            RaycastHit hit;
+            if (Physics.Raycast(transform.position, direction, out hit, strikeRange, strikeLayer))
+            {
+                var particle = Instantiate(strikeImpactParticle, hit.point, strikeImpactParticle.transform.rotation);
+                Destroy(particle, 0.5f);
+                hit.collider.SendMessage("Strike", SendMessageOptions.DontRequireReceiver);
+            }
+            direction = rotation * direction;
+            count--;
+        }
+        yield return null;
+    }
+
+
 
     private void Sleep(float duration)
     {
